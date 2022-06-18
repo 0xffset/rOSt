@@ -68,7 +68,10 @@ impl Thread {
     }
 
     /// Creates a new thread with the given starting address and stack pointer.
-    pub fn new(
+    ///
+    /// # Safety
+    /// This function is unsafe as it does not enforce pointing the instruction and stack pointers to valid addresses.
+    pub unsafe fn new_native(
         address: u64,
         stack_pointer: u64,
         process: Rc<RefCell<Process>>,

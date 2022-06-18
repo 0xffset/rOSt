@@ -2,7 +2,7 @@ use bootloader::{
     boot_info::{MemoryRegionKind, MemoryRegions},
     BootInfo,
 };
-use internal_utils::{serial_println, FullFrameAllocator};
+use internal_utils::FullFrameAllocator;
 use spin::Mutex;
 use x86_64::{
     structures::paging::{
@@ -12,6 +12,8 @@ use x86_64::{
 };
 
 use lazy_static::lazy_static;
+
+use crate::debug;
 
 lazy_static! {
     /// The maximum size of usable memory is 64GiB with this bitflag.
@@ -27,16 +29,24 @@ lazy_static! {
 #[derive(Clone, Copy)]
 pub struct BitmapFrameAllocator {
     memory_map: &'static MemoryRegions,
+    total_region_area: u64,
 }
 
 impl BitmapFrameAllocator {
     /// Creates a FrameAllocator from the passed memory map.
     pub fn init(boot_info: &'static BootInfo) -> Self {
         let memory_map = &boot_info.memory_regions;
+        let total_region_area = memory_map
+            .iter()
+            .map(|region| region.end - region.start)
+            .sum::<u64>();
 
         if TWO_MEGABYTES_FRAMES_BITFLAG.lock().is_some() {
             // Frames already allocated
-            BitmapFrameAllocator { memory_map }
+            BitmapFrameAllocator {
+                memory_map,
+                total_region_area,
+            }
         } else {
             let pmo = boot_info.physical_memory_offset.as_ref().unwrap();
 
@@ -62,7 +72,10 @@ impl BitmapFrameAllocator {
                     .expect("Cannot allocate the 4K frame")
             });
 
-            let mut allocator = BitmapFrameAllocator { memory_map };
+            let mut allocator = BitmapFrameAllocator {
+                memory_map,
+                total_region_area,
+            };
 
             // We set everything as used because BIOS may return holes in the memory map.
             for frame in 0..32768 {
@@ -81,11 +94,7 @@ impl BitmapFrameAllocator {
                     PhysAddr::new(region.end - 1).align_down(Size4KiB::SIZE),
                 );
                 let frame_range = PhysFrame::<Size4KiB>::range_inclusive(start, end);
-                serial_println!(
-                    "Unused memory from {:X} to {:X}",
-                    start.start_address().as_u64(),
-                    end.start_address().as_u64() + Size4KiB::SIZE as u64
-                );
+
                 frame_range.for_each(|f| {
                     allocator
                         .set_unused(f.start_address().as_u64(), Size4KiB::SIZE)
@@ -101,6 +110,8 @@ impl BitmapFrameAllocator {
                 two_megabyte_frames_bitflag.start_address().as_u64(),
                 Size4KiB::SIZE,
             );
+
+            debug::print_frame_memory(&allocator);
 
             allocator
         }
@@ -326,4 +337,19 @@ fn get_bitflag_frames(start_address: PhysAddr) -> (PhysFrame<Size2MiB>, PhysFram
     (four_kilobytes_frames_bitflag, two_megabyte_frames_bitflag)
 }
 
-impl FullFrameAllocator for BitmapFrameAllocator {}
+impl FullFrameAllocator for BitmapFrameAllocator {
+    fn get_total_memory_size(&self) -> u64 {
+        self.total_region_area
+    }
+
+    fn get_free_memory_size(&self) -> u64 {
+        FOUR_KILOBYTES_FRAMES_BITFLAG
+            .lock()
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|flag| flag.count_zeros() as u64)
+            .sum::<u64>()
+            * 4096
+    }
+}

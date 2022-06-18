@@ -75,4 +75,8 @@ pub trait FullFrameAllocator:
     + FrameDeallocator<Size4KiB>
     + FrameDeallocator<Size2MiB>
 {
+    /// Returns total memory available in the system.
+    fn get_total_memory_size(&self) -> u64;
+    /// Returns the amount of memory free to use.
+    fn get_free_memory_size(&self) -> u64;
 }

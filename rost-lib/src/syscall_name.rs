@@ -1,7 +1,7 @@
 #[repr(u64)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SysCallName {
-    FirstProcess = 0,
-    SecondProcess = 1,
-    ThreadExit = 300
+    ThreadExit = 300,
+    ThreadYield = 301,
+    ThreadSleep = 302,
 }

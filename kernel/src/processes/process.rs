@@ -1,7 +1,6 @@
 use core::cell::RefCell;
 
 use crate::processes::memory_mapper::get_user_mode_mapping;
-use crate::processes::ProcessFunction;
 use crate::{debug, init::get_kernel_information};
 use alloc::rc::Rc;
 use internal_utils::get_current_tick;
@@ -42,10 +41,12 @@ impl Process {
 
     /// Creates a new process from a function pointer.
     ///
-    // TODO: loading the process from e.g. an ELF file
+    /// # Safety
+    /// This function is unsafe as it copies the first 1024 bytes from the function pointer.
+    // TODO: Loading the process from e.g. an ELF file
     // We have to look up the structure of an ELF file and prepare the user memory mapping according to it.
     // Then we can load the program and it's data to proper places and create a process out of it.
-    pub fn new(function: ProcessFunction, id: u64) -> Self {
+    pub unsafe fn from_extern(function: extern "C" fn(), id: u64) -> Self {
         let function_pointer = function as *const () as *const u8;
         let kernel_info = get_kernel_information();
         unsafe {

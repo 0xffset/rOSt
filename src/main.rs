@@ -12,8 +12,10 @@
 #![reexport_test_harness_main = "test_main"]
 extern crate alloc;
 
+use alloc::rc::Rc;
 use bootloader::{entry_point, BootInfo};
 use core::arch::asm;
+use core::cell::RefCell;
 use core::panic::PanicInfo;
 use internal_utils::structures::kernel_information::KernelInformation;
 use internal_utils::{constants::MIB, serial_println};
@@ -87,9 +89,13 @@ pub(crate) fn syscall(name: SysCallName, arg1: u64, arg2: u64) -> u64 {
     }
 }
 
-pub extern "C" fn exit(status: u64) -> ! {
+fn exit(status: u64) -> ! {
     crate::syscall(SysCallName::ThreadExit, status, 0);
     panic!("Thread exited");
+}
+
+fn sleep(time: u64) {
+    crate::syscall(SysCallName::ThreadSleep, time, 0);
 }
 
 pub fn kernel_main(kernel_info: KernelInformation) {
@@ -99,9 +105,12 @@ pub fn kernel_main(kernel_info: KernelInformation) {
         run_processes,
         thread::{Thread, ThreadState},
     };
-
-    let process1 = add_process(Process::new(user_mode_check_1, 1));
-    let thread1 = Thread::new(0x1000, 2 * MIB, process1);
+    let process1: Rc<RefCell<Process>>;
+    let thread1: Rc<RefCell<Thread>>;
+    unsafe {
+        process1 = add_process(Process::from_extern(user_mode_check_1, 1));
+        thread1 = Thread::new_native(0x1000, 2 * MIB, process1);
+    }
     Thread::change_state(thread1, ThreadState::Ready);
 
     //let process2 = add_process(Process::new(user_mode_check_2, 2));
@@ -192,19 +201,40 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
 mod tests {
     use alloc::boxed::Box;
     use internal_utils::structures::kernel_information::KernelInformation;
-    use x86_64::structures::paging::Size4KiB;
+    use x86_64::structures::paging::{Size2MiB, Size4KiB};
 
     #[test_case]
     fn should_allocate_frame(kernel_information: KernelInformation) {
         use x86_64::structures::paging::PhysFrame;
         let mut allocator = kernel_information.allocator.lock();
+        let size = allocator.get_free_memory_size();
         let frame: Option<PhysFrame<Size4KiB>> = allocator.allocate_frame();
         assert!(frame.is_some());
+        assert_eq!(4096, size - allocator.get_free_memory_size());
     }
 
     #[test_case]
-    fn should_allocate_box(_: KernelInformation) {
+    fn should_allocate_big_frame(kernel_information: KernelInformation) {
+        use x86_64::structures::paging::PhysFrame;
+        let mut allocator = kernel_information.allocator.lock();
+        let size = allocator.get_free_memory_size();
+        let frame: Option<PhysFrame<Size2MiB>> = allocator.allocate_frame();
+        assert!(frame.is_some());
+        assert_eq!(2 * 1024 * 1024, size - allocator.get_free_memory_size());
+    }
+
+    #[test_case]
+    fn should_allocate_small_box(_: KernelInformation) {
         let boxed = Box::new(4);
         assert_eq!(4, *boxed);
+    }
+
+    #[test_case]
+    fn should_allocate_large_box(_: KernelInformation) {
+        let boxed = Box::new([13u8; 256]);
+        assert_eq!(boxed.len(), 256);
+        for i in 0..256 {
+            assert_eq!(boxed[i], 13);
+        }
     }
 }

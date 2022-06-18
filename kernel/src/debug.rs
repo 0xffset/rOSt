@@ -1,10 +1,54 @@
 use bootloader::boot_info::{MemoryRegionKind, MemoryRegions};
-use internal_utils::serial_println;
+use internal_utils::{serial_println, FullFrameAllocator};
+
+use crate::memory::frame_allocator::BitmapFrameAllocator;
 
 #[inline(always)]
 pub fn log(msg: &str) {
     #[cfg(debug_assertions)]
     serial_println!("[debug] {}", msg);
+}
+
+#[inline(always)]
+pub fn print_frame_memory(allocator: &BitmapFrameAllocator) {
+    #[cfg(debug_assertions)]
+    {
+        serial_println!("[   ---{:^15}---   ]", "FRAME ALLOCATOR");
+        {
+            let mut size = allocator.get_total_memory_size();
+            let mut size_format = "B";
+            if size >= 2 * 1024 {
+                if size < 2 * 1024 * 1024 {
+                    size /= 1024;
+                    size_format = "KiB";
+                } else if size < 2 * 1024 * 1024 * 1024 {
+                    size /= 1024 * 1024;
+                    size_format = "MiB";
+                } else {
+                    size /= 1024 * 1024 * 1024;
+                    size_format = "GiB";
+                }
+            }
+            serial_println!("[debug] Total memory: {:>4}{:>3}", size, size_format);
+        }
+        {
+            let mut size = allocator.get_free_memory_size();
+            let mut size_format = "B";
+            if size >= 2 * 1024 {
+                if size < 2 * 1024 * 1024 {
+                    size /= 1024;
+                    size_format = "KiB";
+                } else if size < 2 * 1024 * 1024 * 1024 {
+                    size /= 1024 * 1024;
+                    size_format = "MiB";
+                } else {
+                    size /= 1024 * 1024 * 1024;
+                    size_format = "GiB";
+                }
+            }
+            serial_println!("[debug] Free memory: {:>4}{:>3}", size, size_format);
+        }
+    }
 }
 
 #[inline(always)]
@@ -28,11 +72,12 @@ pub fn print_memory_map(memory_map: &MemoryRegions) {
                 }
             }
             serial_println!(
-                "{:14}- {:>4}{:>3}  ({:X})",
+                "{:14}- {:>4}{:>3}  ({:X}) ({:X})",
                 decode_memory_kind(region.kind),
                 size,
                 size_format,
-                region.start
+                region.start,
+                region.end
             );
         });
     }

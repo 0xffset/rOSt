@@ -13,7 +13,18 @@ pub mod thread_utils;
 
 pub fn __initialize_syscalls() {
     use kernel::syscalls::system_call::register_syscall;
-    register_syscall(SysCallName::ThreadExit as u16, thread_utils::thread_exit);
+    register_syscall(
+        SysCallName::ThreadExit as u16,
+        thread_utils::handler_thread_exit,
+    );
+    register_syscall(
+        SysCallName::ThreadYield as u16,
+        thread_utils::handler_thread_yield,
+    );
+    register_syscall(
+        SysCallName::ThreadSleep as u16,
+        thread_utils::handler_thread_sleep,
+    );
 }
 
 #[inline(always)]

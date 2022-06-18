@@ -11,5 +11,3 @@ pub use registers_state::RegistersState;
 
 mod scheduler;
 pub use scheduler::{add_process, get_scheduler, run_next_thread, run_processes};
-
-pub type ProcessFunction = extern "C" fn();
